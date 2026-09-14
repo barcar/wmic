@@ -1,0 +1,54 @@
+name: PowerShell Lint
+
+on:
+  push:
+    branches:
+      - master
+      - refactor/powershell-replace-wmic
+      - copilot/refactorpowershell-replace-wmic
+  pull_request:
+    branches:
+      - master
+      - refactor/powershell-replace-wmic
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  psscriptanalyzer:
+    name: PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -Repository PSGallery
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          $scripts = Get-ChildItem -Path . -Recurse -Filter *.ps1 | Select-Object -ExpandProperty FullName
+          if (-not $scripts) {
+            Write-Host 'No PowerShell scripts found.'
+            exit 0
+          }
+
+          $results = @()
+          foreach ($script in $scripts) {
+            $results += Invoke-ScriptAnalyzer -Path $script -Severity Warning,Error
+          }
+
+          if ($results.Count -gt 0) {
+            $results | Format-Table -AutoSize
+            Write-Error "PSScriptAnalyzer reported $($results.Count) issue(s)."
+          }
