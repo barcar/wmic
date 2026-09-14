@@ -228,20 +228,28 @@ function createNoShellError() {
   return err;
 }
 
-function buildPowerShellScript(spec) {
-  var encodedSpec = Buffer.from(JSON.stringify(spec), 'utf8').toString('base64');
-
+function buildPowerShellSpecSection(encodedSpec) {
   return [
     '$ErrorActionPreference = "Stop"',
     '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
-    '$spec = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("' + encodedSpec + '")) | ConvertFrom-Json',
+    '$spec = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("' + encodedSpec + '")) | ConvertFrom-Json'
+  ];
+}
+
+function buildPowerShellQuerySection() {
+  return [
     '$rows = @(',
     '  if ($spec.condition) {',
     '    Get-CimInstance -ClassName $spec.section -Filter $spec.condition',
     '  } else {',
     '    Get-CimInstance -ClassName $spec.section',
     '  }',
-    ')',
+    ')'
+  ];
+}
+
+function buildPowerShellUtilitySection() {
+  return [
     'function Convert-Value([object]$value) {',
     '  if ($null -eq $value) { return "" }',
     '  if ($value -is [System.Array]) { return (($value | ForEach-Object { if ($null -eq $_) { "" } else { [string]$_ } }) -join ",") }',
@@ -251,7 +259,12 @@ function buildPowerShellScript(spec) {
     '  $property = $row.PSObject.Properties[$field]',
     '  if ($null -eq $property) { return "" }',
     '  return Convert-Value $property.Value',
-    '}',
+    '}'
+  ];
+}
+
+function buildPowerShellOutputSection() {
+  return [
     'if ($spec.type -eq "value") {',
     '  foreach ($row in $rows) {',
     '    foreach ($field in $spec.fields) {',
@@ -276,7 +289,24 @@ function buildPowerShellScript(spec) {
     '    Write-Output ($line -join "`t")',
     '  }',
     '}'
-  ].join(';');
+  ];
+}
+
+function joinPowerShellSections(sections) {
+  return sections.reduce(function(acc, section) {
+    return acc.concat(section);
+  }, []).join(';');
+}
+
+function buildPowerShellScript(spec) {
+  var encodedSpec = Buffer.from(JSON.stringify(spec), 'utf8').toString('base64');
+
+  return joinPowerShellSections([
+    buildPowerShellSpecSection(encodedSpec),
+    buildPowerShellQuerySection(),
+    buildPowerShellUtilitySection(),
+    buildPowerShellOutputSection()
+  ]);
 }
 
 function runPowerShell(spec, opts, cb) {
