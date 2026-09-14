@@ -31,9 +31,6 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          if (Get-Command -Name Install-PackageProvider -ErrorAction SilentlyContinue) {
-            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null
-          }
           if (Get-Command -Name Install-Module -ErrorAction SilentlyContinue) {
             $powerShellGet = Get-Module -ListAvailable -Name PowerShellGet | Sort-Object Version -Descending | Select-Object -First 1
             if (-not $powerShellGet) {
