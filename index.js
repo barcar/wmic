@@ -83,6 +83,8 @@ function parse_values(out){
       data = buildDataArray(out),
       keys = data[0];
 
+  if (!keys) return arr;
+
   data.forEach(function(k, i){
     if(k != keys){
       var obj = {};
@@ -104,6 +106,17 @@ function buildDataArray(rawInput){
       keys = [],
       linePattern = /(\S*?\s\s+)/g,
       match;
+
+  if (!lines.length || !lines[0]) return [];
+
+  if (lines[0].indexOf('\t') !== -1) {
+    lines.forEach(function(line) {
+      data.push(line.split('\t').map(function(value) {
+        return value.trim();
+      }));
+    });
+    return data;
+  }
 
   while ((match = linePattern.exec(lines[0])) !== null) {
     if (match.index === linePattern.lastIndex) {
@@ -222,9 +235,13 @@ function buildPowerShellScript(spec) {
     '$ErrorActionPreference = "Stop"',
     '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
     '$spec = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("' + encodedSpec + '")) | ConvertFrom-Json',
-    '$query = "SELECT " + ($(if ($spec.type -eq "list") { "*" } else { ($spec.fields -join ",") })) + " FROM " + $spec.section',
-    'if ($spec.condition) { $query += " WHERE " + $spec.condition }',
-    '$rows = @(Get-CimInstance -Query $query)',
+    '$rows = @(',
+    '  if ($spec.condition) {',
+    '    Get-CimInstance -ClassName $spec.section -Filter $spec.condition',
+    '  } else {',
+    '    Get-CimInstance -ClassName $spec.section',
+    '  }',
+    ')',
     'function Convert-Value([object]$value) {',
     '  if ($null -eq $value) { return "" }',
     '  if ($value -is [System.Array]) { return (($value | ForEach-Object { if ($null -eq $_) { "" } else { [string]$_ } }) -join ",") }',
@@ -245,23 +262,13 @@ function buildPowerShellScript(spec) {
     '    Write-Output ""',
     '  }',
     '} else {',
-    '  $widths = @{}',
-    '  foreach ($field in $spec.fields) { $widths[$field] = $field.Length }',
+    '  Write-Output ($spec.fields -join "`t")',
     '  foreach ($row in $rows) {',
+    '    $line = @()',
     '    foreach ($field in $spec.fields) {',
-    '      $value = Convert-Value $row.$field',
-    '      if ($value.Length -gt $widths[$field]) { $widths[$field] = $value.Length }',
+    '      $line += (Convert-Value $row.$field).Replace("`t", " ")',
     '    }',
-    '  }',
-    '  $header = ""',
-    '  foreach ($field in $spec.fields) { $header += $field.PadRight($widths[$field] + 2) }',
-    '  Write-Output $header',
-    '  foreach ($row in $rows) {',
-    '    $line = ""',
-    '    foreach ($field in $spec.fields) {',
-    '      $line += (Convert-Value $row.$field).PadRight($widths[$field] + 2)',
-    '    }',
-    '    Write-Output $line',
+    '    Write-Output ($line -join "`t")',
     '  }',
     '}'
   ].join(';');
