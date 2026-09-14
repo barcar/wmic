@@ -1,0 +1,42 @@
+name: PowerShell Analyzer
+
+on:
+  push:
+    branches:
+      - master
+      - refactor/powershell-replace-wmic
+      - copilot/refactorpowershell-replace-wmic
+    paths:
+      - "powershell/**/*.ps1"
+      - ".github/workflows/powershell-analyzer.yml"
+  pull_request:
+    branches:
+      - master
+      - refactor/powershell-replace-wmic
+    paths:
+      - "powershell/**/*.ps1"
+      - ".github/workflows/powershell-analyzer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze PowerShell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force
+          $result = Invoke-ScriptAnalyzer -Path powershell -Recurse -Severity Error, Warning
+          if ($result) {
+            $result | Format-Table -AutoSize
+            throw "PSScriptAnalyzer found issues."
+          }
