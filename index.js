@@ -343,7 +343,7 @@ var queue = async.queue(function(cmd, cb) {
 function stringifyBufferArray(array) {
   return array.map(function(buffer) {
     return iconv.decode(buffer, 'utf8');
-  }).join('').trim();
+  }).join('');
 }
 
 exports.get_value = function(section, value, condition, cb){

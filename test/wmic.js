@@ -27,7 +27,7 @@ function makeChild(execPlan) {
   return child;
 }
 
-function withWmic(execFileStub, runTest) {
+function withWmic(execFileStub, runTest, done) {
   var originalExecFile = childProcess.execFile;
   childProcess.execFile = execFileStub;
 
@@ -35,9 +35,14 @@ function withWmic(execFileStub, runTest) {
   try {
     delete require.cache[require.resolve('../index')];
     wmic = require('../index');
-    runTest(wmic);
+    runTest(wmic, function(err) {
+      childProcess.execFile = originalExecFile;
+      done(err);
+    });
   } finally {
-    childProcess.execFile = originalExecFile;
+    if (childProcess.execFile !== originalExecFile && !wmic) {
+      childProcess.execFile = originalExecFile;
+    }
   }
 }
 
@@ -48,23 +53,27 @@ describe('wmic', function() {
       withWmic(function(command, args) {
         calls.push({ command: command, args: args });
         return makeChild({ stdout: 'OSLanguage=1033\n\n' });
-      }, function(wmic) {
+      }, function(wmic, finish) {
         wmic.get_value('os', 'OSLanguage', null, function(err, value) {
-          should.not.exist(err);
-          value.should.equal('1033');
-          calls.length.should.equal(1);
-          calls[0].command.should.equal('pwsh');
-          calls[0].args[4].should.equal('-EncodedCommand');
-          var script = Buffer.from(calls[0].args[5], 'base64').toString('utf16le');
-          script.should.match(/Get-CimInstance/);
-          var specBase64 = script.match(/FromBase64String\("([^"]+)"\)/)[1];
-          var spec = JSON.parse(Buffer.from(specBase64, 'base64').toString('utf8'));
-          spec.section.should.equal('Win32_OperatingSystem');
-          script.should.not.match(/wmic/i);
-          script.should.not.match(/cmd\.exe/i);
-          done();
+          try {
+            should.not.exist(err);
+            value.should.equal('1033');
+            calls.length.should.equal(1);
+            calls[0].command.should.equal('pwsh');
+            calls[0].args[4].should.equal('-EncodedCommand');
+            var script = Buffer.from(calls[0].args[5], 'base64').toString('utf16le');
+            script.should.match(/Get-CimInstance/);
+            var specBase64 = script.match(/FromBase64String\("([^"]+)"\)/)[1];
+            var spec = JSON.parse(Buffer.from(specBase64, 'base64').toString('utf8'));
+            spec.section.should.equal('Win32_OperatingSystem');
+            script.should.not.match(/wmic/i);
+            script.should.not.match(/cmd\.exe/i);
+            finish();
+          } catch (assertErr) {
+            finish(assertErr);
+          }
         });
-      });
+      }, done);
     });
 
     it('falls back to powershell when pwsh is unavailable', function(done) {
@@ -77,14 +86,18 @@ describe('wmic', function() {
           return makeChild({ error: err });
         }
         return makeChild({ stdout: 'OSLanguage=1033\n\n' });
-      }, function(wmic) {
+      }, function(wmic, finish) {
         wmic.get_value('os', 'OSLanguage', null, function(err, value) {
-          should.not.exist(err);
-          value.should.equal('1033');
-          calls.should.eql(['pwsh', 'powershell']);
-          done();
+          try {
+            should.not.exist(err);
+            value.should.equal('1033');
+            calls.should.eql(['pwsh', 'powershell']);
+            finish();
+          } catch (assertErr) {
+            finish(assertErr);
+          }
         });
-      });
+      }, done);
     });
 
     it('does not invoke cmd.exe or wmic.exe', function(done) {
@@ -92,14 +105,18 @@ describe('wmic', function() {
       withWmic(function(command) {
         commands.push(command);
         return makeChild({ stdout: 'Description  IPAddress  \nAdapter     10.0.0.1   \n' });
-      }, function(wmic) {
+      }, function(wmic, finish) {
         wmic.get_values('nicconfig', 'description, ipaddress', null, function(err) {
-          should.not.exist(err);
-          commands.should.not.containEql('cmd.exe');
-          commands.should.not.containEql('wmic');
-          done();
+          try {
+            should.not.exist(err);
+            commands.should.not.containEql('cmd.exe');
+            commands.should.not.containEql('wmic');
+            finish();
+          } catch (assertErr) {
+            finish(assertErr);
+          }
         });
-      });
+      }, done);
     });
 
     it('preserves output parsing behavior for get_values', function(done) {
@@ -107,17 +124,21 @@ describe('wmic', function() {
         return makeChild({
           stdout: 'Description   IPAddress  \nAdapter  One  10.0.0.1  \nAdapter Two              \n'
         });
-      }, function(wmic) {
+      }, function(wmic, finish) {
         wmic.get_values('nicconfig', 'description, ipaddress', null, function(err, values) {
-          should.not.exist(err);
-          values.length.should.equal(2);
-          values[0].Description.should.equal('Adapter  One');
-          values[0].IPAddress.should.equal('10.0.0.1');
-          values[1].Description.should.equal('Adapter Two');
-          values[1].IPAddress.should.equal('');
-          done();
+          try {
+            should.not.exist(err);
+            values.length.should.equal(2);
+            values[0].Description.should.equal('Adapter  One');
+            values[0].IPAddress.should.equal('10.0.0.1');
+            values[1].Description.should.equal('Adapter Two');
+            values[1].IPAddress.should.equal('');
+            finish();
+          } catch (assertErr) {
+            finish(assertErr);
+          }
         });
-      });
+      }, done);
     });
 
     it('returns a missing-shell error when no powershell is available', function(done) {
@@ -125,49 +146,65 @@ describe('wmic', function() {
         var err = new Error('not found');
         err.code = 'ENOENT';
         return makeChild({ error: err });
-      }, function(wmic) {
+      }, function(wmic, finish) {
         wmic.get_value('os', 'OSLanguage', null, function(err) {
-          should.exist(err);
-          err.message.should.equal('Unable to find PowerShell command in path.');
-          done();
+          try {
+            should.exist(err);
+            err.message.should.equal('Unable to find PowerShell command in path.');
+            finish();
+          } catch (assertErr) {
+            finish(assertErr);
+          }
         });
-      });
+      }, done);
     });
 
     it('surfaces command failures through stderr', function(done) {
       withWmic(function() {
         return makeChild({ stderr: 'Boom failed', exitCode: 1 });
-      }, function(wmic) {
+      }, function(wmic, finish) {
         wmic.get_value('os', 'OSLanguage', null, function(err) {
-          should.exist(err);
-          err.message.should.equal('Boom failed');
-          done();
+          try {
+            should.exist(err);
+            err.message.should.equal('Boom failed');
+            finish();
+          } catch (assertErr) {
+            finish(assertErr);
+          }
         });
-      });
+      }, done);
     });
 
     it('does not fail on stderr output when command exits successfully', function(done) {
       withWmic(function() {
         return makeChild({ stdout: 'OSLanguage=1033\n\n', stderr: 'warning text' });
-      }, function(wmic) {
+      }, function(wmic, finish) {
         wmic.get_value('os', 'OSLanguage', null, function(err, value) {
-          should.not.exist(err);
-          value.should.equal('1033');
-          done();
+          try {
+            should.not.exist(err);
+            value.should.equal('1033');
+            finish();
+          } catch (assertErr) {
+            finish(assertErr);
+          }
         });
-      });
+      }, done);
     });
 
     it('rejects conditions with newlines', function(done) {
       withWmic(function() {
         return makeChild({ stdout: '' });
-      }, function(wmic) {
+      }, function(wmic, finish) {
         wmic.get_value('os', 'OSLanguage', "Name='x'\nOR 1=1", function(err) {
-          should.exist(err);
-          err.message.should.equal('Invalid condition');
-          done();
+          try {
+            should.exist(err);
+            err.message.should.equal('Invalid condition');
+            finish();
+          } catch (assertErr) {
+            finish(assertErr);
+          }
         });
-      });
+      }, done);
     });
   });
 
