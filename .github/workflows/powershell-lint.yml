@@ -30,18 +30,13 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
 
-          $scripts = Get-ChildItem -Path . -Recurse -Filter *.ps1 |
-            Where-Object { $_.FullName -notmatch '[\\/](node_modules|\.git|dist|build|coverage)[\\/]' } |
-            Select-Object -ExpandProperty FullName
+          $scripts = @(git ls-files '*.ps1')
           if (-not $scripts) {
             Write-Host 'No PowerShell scripts found.'
             exit 0
           }
 
-          $results = @()
-          foreach ($script in $scripts) {
-            $results += Invoke-ScriptAnalyzer -Path $script -Severity Warning,Error
-          }
+          $results = @($scripts | Invoke-ScriptAnalyzer -Severity Warning,Error)
 
           if ($results.Count -gt 0) {
             $results | Format-Table -AutoSize
