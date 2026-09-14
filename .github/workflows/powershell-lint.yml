@@ -55,7 +55,7 @@ jobs:
             exit 0
           }
 
-          $results = @($scripts | Invoke-ScriptAnalyzer -Severity Warning,Error)
+          $results = @(Invoke-ScriptAnalyzer -Path $scripts -Severity Warning,Error)
 
           if ($results.Count -gt 0) {
             $results | Format-Table -AutoSize
