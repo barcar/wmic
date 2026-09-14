@@ -40,7 +40,13 @@ jobs:
           if (Get-Command -Name Install-Module -ErrorAction SilentlyContinue) {
             Install-Module -Name PowerShellGet -Scope CurrentUser -Force -AllowClobber
           }
-          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+          $psGallery = $null
+          try {
+            $psGallery = Get-PSRepository -Name PSGallery -ErrorAction Stop
+          } catch {
+            $psGallery = $null
+          }
+          if (-not $psGallery) {
             Register-PSRepository -Default
           }
           if (-not (Test-Path -Path powershell -PathType Container)) {
