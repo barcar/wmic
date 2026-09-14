@@ -30,13 +30,20 @@ jobs:
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
 
           $scripts = @()
-          if ($env:GITHUB_EVENT_NAME -eq 'pull_request' -and $env:GITHUB_BASE_REF) {
-            $scripts = @(git diff --name-only "origin/$env:GITHUB_BASE_REF...HEAD" -- '*.ps1' '*.psm1' '*.psd1')
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request' -and $env:PR_BASE_SHA -and $env:PR_HEAD_SHA) {
+            $baseAvailable = (git cat-file -e "$env:PR_BASE_SHA^{commit}" 2>$null; $LASTEXITCODE -eq 0)
+            $headAvailable = (git cat-file -e "$env:PR_HEAD_SHA^{commit}" 2>$null; $LASTEXITCODE -eq 0)
+            if ($baseAvailable -and $headAvailable) {
+              $scripts = @(git diff --name-only "$env:PR_BASE_SHA...$env:PR_HEAD_SHA" -- '*.ps1' '*.psm1' '*.psd1')
+            }
           }
 
           if (-not $scripts) {
