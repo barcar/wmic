@@ -39,8 +39,10 @@ jobs:
 
           $scripts = @()
           if ($env:GITHUB_EVENT_NAME -eq 'pull_request' -and $env:PR_BASE_SHA -and $env:PR_HEAD_SHA) {
-            $baseAvailable = (git cat-file -e "$env:PR_BASE_SHA^{commit}" 2>$null; $LASTEXITCODE -eq 0)
-            $headAvailable = (git cat-file -e "$env:PR_HEAD_SHA^{commit}" 2>$null; $LASTEXITCODE -eq 0)
+            & git cat-file -e "$env:PR_BASE_SHA^{commit}" 2>$null
+            $baseAvailable = ($LASTEXITCODE -eq 0)
+            & git cat-file -e "$env:PR_HEAD_SHA^{commit}" 2>$null
+            $headAvailable = ($LASTEXITCODE -eq 0)
             if ($baseAvailable -and $headAvailable) {
               $scripts = @(git diff --name-only "$env:PR_BASE_SHA...$env:PR_HEAD_SHA" -- '*.ps1' '*.psm1' '*.psd1')
             }
