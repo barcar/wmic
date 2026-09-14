@@ -35,7 +35,10 @@ jobs:
             Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null
           }
           if (Get-Command -Name Install-Module -ErrorAction SilentlyContinue) {
-            Install-Module -Name PowerShellGet -Scope CurrentUser -Force -AllowClobber
+            $powerShellGet = Get-Module -ListAvailable -Name PowerShellGet | Sort-Object Version -Descending | Select-Object -First 1
+            if (-not $powerShellGet) {
+              Install-Module -Name PowerShellGet -Scope CurrentUser -Force -AllowClobber
+            }
           }
           $psGallery = $null
           try {
@@ -51,6 +54,7 @@ jobs:
             exit 0
           }
           Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.24.0 -Repository PSGallery -Scope CurrentUser -Force
+          Import-Module -Name PSScriptAnalyzer -RequiredVersion 1.24.0 -Force
           $result = Invoke-ScriptAnalyzer -Path powershell -Recurse -Severity Error,Warning
           if ($result) {
             $result | Format-Table -AutoSize
