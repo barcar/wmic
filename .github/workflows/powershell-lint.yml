@@ -13,6 +13,8 @@ jobs:
     name: PSScriptAnalyzer
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      PSSCRIPTANALYZER_VERSION: 1.22.0
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,7 +24,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -Repository PSGallery
+          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -Repository PSGallery -RequiredVersion $env:PSSCRIPTANALYZER_VERSION
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
