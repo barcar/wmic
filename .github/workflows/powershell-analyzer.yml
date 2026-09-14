@@ -2,10 +2,17 @@ name: PowerShell Analyzer
 
 on:
   push:
+    branches:
+      - master
+      - "refactor/**"
+      - "copilot/**"
     paths:
       - "powershell/**/*.ps1"
       - ".github/workflows/powershell-analyzer.yml"
   pull_request:
+    branches:
+      - master
+      - "refactor/**"
     paths:
       - "powershell/**/*.ps1"
       - ".github/workflows/powershell-analyzer.yml"
