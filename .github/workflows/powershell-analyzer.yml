@@ -34,6 +34,12 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+          if (Get-Command -Name Install-PackageProvider -ErrorAction SilentlyContinue) {
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null
+          }
+          if (Get-Command -Name Install-Module -ErrorAction SilentlyContinue) {
+            Install-Module -Name PowerShellGet -Scope CurrentUser -Force -AllowClobber
+          }
           if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
             Register-PSRepository -Default
           }
