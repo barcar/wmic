@@ -29,16 +29,16 @@ function makeChild(execPlan) {
 
 function withWmic(execFileStub, runTest) {
   var originalExecFile = childProcess.execFile;
+  childProcess.execFile = execFileStub;
+
   var wmic;
   try {
     delete require.cache[require.resolve('../index')];
-    childProcess.execFile = execFileStub;
     wmic = require('../index');
+    runTest(wmic);
   } finally {
     childProcess.execFile = originalExecFile;
   }
-
-  runTest(wmic);
 }
 
 describe('wmic', function() {
