@@ -101,13 +101,13 @@ describe('wmic', function() {
     it('preserves output parsing behavior for get_values', function(done) {
       withWmic(function() {
         return makeChild({
-          stdout: 'Description  IPAddress  \nAdapter One  10.0.0.1  \nAdapter Two             \n'
+          stdout: 'Description   IPAddress  \nAdapter  One  10.0.0.1  \nAdapter Two              \n'
         });
       }, function(wmic) {
         wmic.get_values('nicconfig', 'description, ipaddress', null, function(err, values) {
           should.not.exist(err);
           values.length.should.equal(2);
-          values[0].Description.should.equal('Adapter One');
+          values[0].Description.should.equal('Adapter  One');
           values[0].IPAddress.should.equal('10.0.0.1');
           values[1].Description.should.equal('Adapter Two');
           values[1].IPAddress.should.equal('');
@@ -137,6 +137,30 @@ describe('wmic', function() {
         wmic.get_value('os', 'OSLanguage', null, function(err) {
           should.exist(err);
           err.message.should.equal('Boom failed');
+          done();
+        });
+      });
+    });
+
+    it('does not fail on stderr output when command exits successfully', function(done) {
+      withWmic(function() {
+        return makeChild({ stdout: 'OSLanguage=1033\n\n', stderr: 'warning text' });
+      }, function(wmic) {
+        wmic.get_value('os', 'OSLanguage', null, function(err, value) {
+          should.not.exist(err);
+          value.should.equal('1033');
+          done();
+        });
+      });
+    });
+
+    it('rejects conditions with newlines', function(done) {
+      withWmic(function() {
+        return makeChild({ stdout: '' });
+      }, function(wmic) {
+        wmic.get_value('os', 'OSLanguage', "Name='x'\nOR 1=1", function(err) {
+          should.exist(err);
+          err.message.should.equal('Invalid condition');
           done();
         });
       });

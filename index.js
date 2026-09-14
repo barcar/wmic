@@ -172,6 +172,9 @@ function parseCommandSpec(cmd) {
   if (args[0] && args[0].toLowerCase() === 'where') {
     args.shift();
     condition = args.shift() || null;
+    if (condition && /[\r\n]/.test(condition)) {
+      throw new Error('Invalid condition');
+    }
   }
 
   var action = (args.shift() || '').toLowerCase();
@@ -298,12 +301,16 @@ function runPowerShell(spec, opts, cb) {
     ps.stdout.on('data', function(d) { stdout.push(d); });
     ps.stderr.on('data', function(d) { stderr.push(d); });
 
-    ps.on('exit', function() {
+    ps.on('exit', function(code) {
       if (done) return;
       done = true;
       var stdoutStr = stringifyBufferArray(stdout);
       var stderrStr = stringifyBufferArray(stderr);
-      cb(stderrStr ? new Error(stderrStr) : null, stdoutStr, pid);
+      if (code !== 0) {
+        cb(new Error(stderrStr || ('PowerShell command failed with exit code ' + code + '.')), stdoutStr, pid);
+        return;
+      }
+      cb(null, stdoutStr, pid);
     });
 
     ps.stdin.end();
