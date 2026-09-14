@@ -1,6 +1,7 @@
 # wmic
 
-Wrapper around the Windows WMIC interface for Node.js.
+PowerShell-based wrapper around Windows WMI/CIM queries for Node.js.
+It keeps the original `wmic` module API as a drop-in replacement while avoiding `wmic.exe`.
 
 ## Example
 

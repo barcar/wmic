@@ -5,9 +5,7 @@
 */
 var MAX_WORKER_COUNT = 100;
 var execFile = require('child_process').execFile,
-    exec  = require('child_process').exec,
     async = require('async'),
-    fs    = require('fs'),
     iconv = require('iconv-lite');
 
 /**
@@ -151,93 +149,188 @@ var run = exports.run = function run(cmd, cb) {
   queue.push(cmd, cb);
 };
 
-// The encoding is cached in this variable, so the CHCP command is executed only once.
-var consoleEncoding;
+var SHELLS = ['pwsh', 'powershell'];
+var ALIASES = {
+  computersystem: 'Win32_ComputerSystem',
+  logicaldisk: 'Win32_LogicalDisk',
+  nic: 'Win32_NetworkAdapter',
+  nicconfig: 'Win32_NetworkAdapterConfiguration',
+  os: 'Win32_OperatingSystem'
+};
 
-var queue = async.queue(function(cmd, cb) {
+function resolveClassName(section) {
+  if (!section) return '';
+  if (/^win32_/i.test(section)) return section;
+  return ALIASES[section.toLowerCase()] || section;
+}
 
-  var opts = { env: process.env, cwd: process.env.TEMP };
-  if (opts.env.PATH.indexOf('system32') === -1) {
-    opts.env.PATH += ';' + process.env.WINDIR + "\\system32";
-    opts.env.PATH += ';' + process.env.WINDIR + "\\system32\\wbem";
+function parseCommandSpec(cmd) {
+  var args = splitter(cmd);
+  var section = args.shift();
+  var condition = null;
+
+  if (args[0] && args[0].toLowerCase() === 'where') {
+    args.shift();
+    condition = args.shift() || null;
   }
 
+  var action = (args.shift() || '').toLowerCase();
+  if (!section || !action) throw new Error('Invalid command');
+
+  if (action === 'list') {
+    return {
+      type: 'list',
+      section: resolveClassName(section),
+      condition: condition
+    };
+  }
+
+  if (action !== 'get') throw new Error('Unsupported command');
+
+  var valueMode = false;
+  var fields = args.filter(function(arg) {
+    var isValueSwitch = arg.toLowerCase() === '/value';
+    valueMode = valueMode || isValueSwitch;
+    return !isValueSwitch;
+  }).join(' ').split(',').map(function(field) {
+    return field.trim();
+  }).filter(Boolean);
+
+  if (!fields.length) throw new Error('Missing fields');
+
+  return {
+    type: valueMode ? 'value' : 'table',
+    section: resolveClassName(section),
+    condition: condition,
+    fields: fields
+  };
+}
+
+function createNoShellError() {
+  var err = new Error('Unable to find PowerShell command in path.');
+  err.code = 'ENOENT';
+  return err;
+}
+
+function buildPowerShellScript(spec) {
+  var encodedSpec = Buffer.from(JSON.stringify(spec), 'utf8').toString('base64');
+
+  return [
+    '$ErrorActionPreference = "Stop"',
+    '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
+    '$spec = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("' + encodedSpec + '")) | ConvertFrom-Json',
+    '$query = "SELECT " + ($(if ($spec.type -eq "list") { "*" } else { ($spec.fields -join ",") })) + " FROM " + $spec.section',
+    'if ($spec.condition) { $query += " WHERE " + $spec.condition }',
+    '$rows = @(Get-CimInstance -Query $query)',
+    'function Convert-Value([object]$value) {',
+    '  if ($null -eq $value) { return "" }',
+    '  if ($value -is [System.Array]) { return (($value | ForEach-Object { if ($null -eq $_) { "" } else { [string]$_ } }) -join ",") }',
+    '  return [string]$value',
+    '}',
+    'if ($spec.type -eq "value") {',
+    '  foreach ($row in $rows) {',
+    '    foreach ($field in $spec.fields) {',
+    '      Write-Output ($field + "=" + (Convert-Value $row.$field))',
+    '    }',
+    '    Write-Output ""',
+    '  }',
+    '} elseif ($spec.type -eq "list") {',
+    '  foreach ($row in $rows) {',
+    '    foreach ($property in $row.CimInstanceProperties) {',
+    '      Write-Output ($property.Name + "=" + (Convert-Value $property.Value))',
+    '    }',
+    '    Write-Output ""',
+    '  }',
+    '} else {',
+    '  $widths = @{}',
+    '  foreach ($field in $spec.fields) { $widths[$field] = $field.Length }',
+    '  foreach ($row in $rows) {',
+    '    foreach ($field in $spec.fields) {',
+    '      $value = Convert-Value $row.$field',
+    '      if ($value.Length -gt $widths[$field]) { $widths[$field] = $value.Length }',
+    '    }',
+    '  }',
+    '  $header = ""',
+    '  foreach ($field in $spec.fields) { $header += $field.PadRight($widths[$field] + 2) }',
+    '  Write-Output $header',
+    '  foreach ($row in $rows) {',
+    '    $line = ""',
+    '    foreach ($field in $spec.fields) {',
+    '      $line += (Convert-Value $row.$field).PadRight($widths[$field] + 2)',
+    '    }',
+    '    Write-Output $line',
+    '  }',
+    '}'
+  ].join(';');
+}
+
+function runPowerShell(spec, opts, cb) {
   var pid;
 
-  async.parallel([
-      function(cb) {
-        if (consoleEncoding) {
-          cb(null, consoleEncoding);
-        } else {
-          exec('chcp', function(err, stdout) {
-            if (err) {
-              cb(err);
-              return;
-            }
-            var codePage = get_encoding(stdout);
-            consoleEncoding = codePage && codePage !== '65001' ? 'cp' + codePage : 'utf8';
-            cb(null, consoleEncoding);
-          });
-        }
-      },
-      function(cb) {
-        var wm = execFile('wmic', splitter(cmd), opts),
-          stdout = [],
-          stderr = [];
-
-        pid = wm.pid;
-
-        wm.on('error', function(e) {
-          if (e.code == 'ENOENT')
-            e.message = 'Unable to find wmic command in path.';
-
-          cb(e);
-        })
-
-        wm.stdout.on('data', function(d) {
-          // console.log('Got out: ' + d.toString())
-          stdout.push(d);
-        });
-
-        wm.stderr.on('data', function(e) {
-          // console.log('Got error: ' + e.toString())
-          stderr.push(e);
-        });
-
-        wm.on('exit', function(code) {
-          // remove weird temp file generated by wmic
-          fs.unlink('TempWmicBatchFile.bat', function() { /* noop */ });
-
-          setImmediate(function() {
-            cb(null, [stdout, stderr]);
-          })
-        });
-
-        wm.stdin.end();
-      }
-    ],
-    function(err, results) {
-      if (!err) {
-        var encoding = results[0];
-        var stdoutStr = stringifyBufferArray(results[1][0], encoding);
-        var stderrStr = stringifyBufferArray(results[1][1], encoding);
-        if (stderrStr) {
-          err = new Error(stderrStr);
-        }
-        cb(err, stdoutStr, pid);
-      } else {
-        cb(err, '', pid);
-      }
+  function attempt(index) {
+    if (index >= SHELLS.length) {
+      cb(createNoShellError(), '', pid);
+      return;
     }
-  );
 
-  function stringifyBufferArray(array, encoding) {
-    return array.map(function(buffer) {
-      return iconv.decode(buffer, encoding);
-    }).join(',').replace(/^,/, '').replace(/,\s+$/, '').trim();
+    var command = SHELLS[index];
+    var script = buildPowerShellScript(spec);
+    var encodedCommand = Buffer.from(script, 'utf16le').toString('base64');
+    var ps = execFile(command, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodedCommand], opts);
+    var stdout = [];
+    var stderr = [];
+    var done = false;
+
+    pid = ps.pid;
+
+    ps.on('error', function(err) {
+      if (done) return;
+      if (err.code === 'ENOENT') {
+        done = true;
+        attempt(index + 1);
+        return;
+      }
+
+      done = true;
+      cb(err, '', pid);
+    });
+
+    ps.stdout.on('data', function(d) { stdout.push(d); });
+    ps.stderr.on('data', function(d) { stderr.push(d); });
+
+    ps.on('exit', function() {
+      if (done) return;
+      done = true;
+      var stdoutStr = stringifyBufferArray(stdout);
+      var stderrStr = stringifyBufferArray(stderr);
+      cb(stderrStr ? new Error(stderrStr) : null, stdoutStr, pid);
+    });
+
+    ps.stdin.end();
   }
 
+  attempt(0);
+}
+
+var queue = async.queue(function(cmd, cb) {
+  var opts = { env: process.env, cwd: process.env.TEMP };
+  var spec;
+
+  try {
+    spec = parseCommandSpec(cmd);
+  } catch (err) {
+    cb(err, '');
+    return;
+  }
+
+  runPowerShell(spec, opts, cb);
 }, MAX_WORKER_COUNT);
+
+function stringifyBufferArray(array) {
+  return array.map(function(buffer) {
+    return iconv.decode(buffer, 'utf8');
+  }).join(',').replace(/^,/, '').replace(/,\s+$/, '').trim();
+}
 
 exports.get_value = function(section, value, condition, cb){
   var cond = condition ? ' where "' + condition + '" ' : '';
