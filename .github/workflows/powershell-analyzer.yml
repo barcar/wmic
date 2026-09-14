@@ -2,6 +2,7 @@ name: PowerShell Analyzer
 
 on:
   push:
+    # Limit routine branch pushes but keep broad coverage for active development branches.
     branches:
       - master
       - "refactor/**"
@@ -10,6 +11,7 @@ on:
       - "powershell/**/*.ps1"
       - ".github/workflows/powershell-analyzer.yml"
   pull_request:
+    # Analyze PRs by changed paths so feature branches are still covered.
     paths:
       - "powershell/**/*.ps1"
       - ".github/workflows/powershell-analyzer.yml"
@@ -47,6 +49,7 @@ jobs:
             Register-PSRepository -Default
           }
           if (-not (Test-Path -Path powershell -PathType Container)) {
+            # Repository may not contain PowerShell scripts in every branch.
             Write-Host "No powershell directory found; skipping analysis."
             exit 0
           }

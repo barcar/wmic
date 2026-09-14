@@ -68,6 +68,7 @@ function parse_list(data){
     });
 
     lines.forEach(function(line) {
+      // WMIC-style list output is key=value. Values may also include '=' so split once.
       var cleaned = line.replace(/^,/, '');
       var sep = cleaned.indexOf('=');
       if (sep === -1) return;
@@ -178,6 +179,7 @@ var ALIASES = {
   os: 'Win32_OperatingSystem'
 };
 
+// Translate common WMIC aliases to CIM class names while still accepting explicit Win32_* names.
 function resolveClassName(section) {
   if (!section) return '';
   if (/^win32_/i.test(section)) return section;
@@ -239,6 +241,7 @@ var POWER_SHELL_SCRIPT_PATH = path.join(__dirname, 'powershell', 'wmic-query.ps1
 var POWER_SHELL_SPEC_PLACEHOLDER = '__WMIC_SPEC_BASE64__';
 var powerShellScriptTemplate;
 
+// Read and cache script template once per process for lower per-call overhead.
 function getPowerShellScriptTemplate() {
   if (!powerShellScriptTemplate) {
     powerShellScriptTemplate = fs.readFileSync(POWER_SHELL_SCRIPT_PATH, 'utf8');
@@ -247,12 +250,14 @@ function getPowerShellScriptTemplate() {
 }
 
 function buildPowerShellScript(spec) {
+  // Pass spec as encoded JSON to avoid fragile shell quoting and injection via interpolation.
   var encodedSpec = Buffer.from(JSON.stringify(spec), 'utf8').toString('base64');
   return getPowerShellScriptTemplate().split(POWER_SHELL_SPEC_PLACEHOLDER).join(encodedSpec);
 }
 
 function runPowerShell(spec, opts, cb) {
   var pid;
+  // Build/encode once and reuse across fallback attempts (pwsh -> powershell).
   var script = buildPowerShellScript(spec);
   var encodedCommand = Buffer.from(script, 'utf16le').toString('base64');
 
@@ -285,6 +290,7 @@ function runPowerShell(spec, opts, cb) {
     ps.stdout.on('data', function(d) { stdout.push(d); });
     ps.stderr.on('data', function(d) { stderr.push(d); });
 
+    // Use "close" so all stdio streams are fully flushed before we parse output.
     ps.on('close', function(code) {
       if (done) return;
       done = true;

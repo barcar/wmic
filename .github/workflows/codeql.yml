@@ -31,6 +31,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
+          # Repository runtime is Node.js; JavaScript covers source and workflow-action checks.
           languages: javascript
 
       - name: Autobuild
