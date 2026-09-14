@@ -2,14 +2,7 @@ name: PowerShell Lint
 
 on:
   push:
-    branches:
-      - master
-      - refactor/powershell-replace-wmic
-      - copilot/refactorpowershell-replace-wmic
   pull_request:
-    branches:
-      - master
-      - refactor/powershell-replace-wmic
   workflow_dispatch:
 
 permissions:
@@ -37,7 +30,9 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
 
-          $scripts = Get-ChildItem -Path . -Recurse -Filter *.ps1 | Select-Object -ExpandProperty FullName
+          $scripts = Get-ChildItem -Path . -Recurse -Filter *.ps1 |
+            Where-Object { $_.FullName -notmatch '[\\/](node_modules|\.git|dist|build|coverage)[\\/]' } |
+            Select-Object -ExpandProperty FullName
           if (-not $scripts) {
             Write-Host 'No PowerShell scripts found.'
             exit 0
