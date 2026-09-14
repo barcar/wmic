@@ -247,10 +247,15 @@ function buildPowerShellScript(spec) {
     '  if ($value -is [System.Array]) { return (($value | ForEach-Object { if ($null -eq $_) { "" } else { [string]$_ } }) -join ",") }',
     '  return [string]$value',
     '}',
+    'function Get-FieldValue([object]$row, [string]$field) {',
+    '  $property = $row.PSObject.Properties[$field]',
+    '  if ($null -eq $property) { return "" }',
+    '  return Convert-Value $property.Value',
+    '}',
     'if ($spec.type -eq "value") {',
     '  foreach ($row in $rows) {',
     '    foreach ($field in $spec.fields) {',
-    '      Write-Output ($field + "=" + (Convert-Value $row.$field))',
+    '      Write-Output ($field + "=" + (Get-FieldValue $row $field))',
     '    }',
     '    Write-Output ""',
     '  }',
@@ -266,7 +271,7 @@ function buildPowerShellScript(spec) {
     '  foreach ($row in $rows) {',
     '    $line = @()',
     '    foreach ($field in $spec.fields) {',
-    '      $line += (Convert-Value $row.$field).Replace("`t", " ")',
+    '      $line += (Get-FieldValue $row $field).Replace("`t", " ")',
     '    }',
     '    Write-Output ($line -join "`t")',
     '  }',
@@ -308,7 +313,7 @@ function runPowerShell(spec, opts, cb) {
     ps.stdout.on('data', function(d) { stdout.push(d); });
     ps.stderr.on('data', function(d) { stderr.push(d); });
 
-    ps.on('exit', function(code) {
+    ps.on('close', function(code) {
       if (done) return;
       done = true;
       var stdoutStr = stringifyBufferArray(stdout);

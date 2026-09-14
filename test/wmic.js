@@ -21,7 +21,7 @@ function makeChild(execPlan) {
     if (execPlan.stderr) {
       child.stderr.emit('data', Buffer.from(execPlan.stderr));
     }
-    child.emit('exit', execPlan.exitCode || 0);
+    child.emit('close', execPlan.exitCode || 0);
   });
 
   return child;
@@ -199,6 +199,28 @@ describe('wmic', function() {
           try {
             should.exist(err);
             err.message.should.equal('Invalid condition');
+            finish();
+          } catch (assertErr) {
+            finish(assertErr);
+          }
+        });
+      }, done);
+    });
+
+    it('preserves output parsing behavior for get_list', function(done) {
+      withWmic(function() {
+        return makeChild({
+          stdout: 'Name=Ethernet 1\nNetEnabled=True\n\nName=Loopback Adapter\nNetEnabled=\n\n'
+        });
+      }, function(wmic, finish) {
+        wmic.get_list('nic', function(err, values) {
+          try {
+            should.not.exist(err);
+            values.length.should.equal(2);
+            values[0].Name.should.equal('Ethernet 1');
+            values[0].NetEnabled.should.equal('True');
+            values[1].Name.should.equal('Loopback Adapter');
+            values[1].NetEnabled.should.equal('');
             finish();
           } catch (assertErr) {
             finish(assertErr);
