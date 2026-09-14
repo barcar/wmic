@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install PSScriptAnalyzer
         shell: pwsh
@@ -32,7 +34,15 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
 
-          $scripts = @(git ls-files '*.ps1' '*.psm1' '*.psd1')
+          $scripts = @()
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request' -and $env:GITHUB_BASE_REF) {
+            $scripts = @(git diff --name-only "origin/$env:GITHUB_BASE_REF...HEAD" -- '*.ps1' '*.psm1' '*.psd1')
+          }
+
+          if (-not $scripts) {
+            $scripts = @(git ls-files '*.ps1' '*.psm1' '*.psd1')
+          }
+
           if (-not $scripts) {
             Write-Host 'No PowerShell scripts found.'
             exit 0
