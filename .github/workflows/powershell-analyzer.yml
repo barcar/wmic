@@ -2,17 +2,10 @@ name: PowerShell Analyzer
 
 on:
   push:
-    branches:
-      - master
-      - refactor/powershell-replace-wmic
-      - copilot/refactorpowershell-replace-wmic
     paths:
       - "powershell/**/*.ps1"
       - ".github/workflows/powershell-analyzer.yml"
   pull_request:
-    branches:
-      - master
-      - refactor/powershell-replace-wmic
     paths:
       - "powershell/**/*.ps1"
       - ".github/workflows/powershell-analyzer.yml"
@@ -39,7 +32,7 @@ jobs:
           }
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser -Force
-          $result = Invoke-ScriptAnalyzer -Path powershell -Recurse -Severity Error, Warning
+          $result = Invoke-ScriptAnalyzer -Path powershell -Recurse -Severity Error,Warning
           if ($result) {
             $result | Format-Table -AutoSize
             throw "PSScriptAnalyzer found issues."
