@@ -50,8 +50,7 @@ jobs:
             Write-Host "No powershell directory found; skipping analysis."
             exit 0
           }
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser -Force
+          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.24.0 -Repository PSGallery -Scope CurrentUser -Force
           $result = Invoke-ScriptAnalyzer -Path powershell -Recurse -Severity Error,Warning
           if ($result) {
             $result | Format-Table -AutoSize
