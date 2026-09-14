@@ -228,6 +228,25 @@ describe('wmic', function() {
         });
       }, done);
     });
+
+    it('preserves list values containing equals characters', function(done) {
+      withWmic(function() {
+        return makeChild({
+          stdout: 'Name=Adapter 1\nPath=C:=\\Program=Files\\Adapter\n\n'
+        });
+      }, function(wmic, finish) {
+        wmic.get_list('nic', function(err, values) {
+          try {
+            should.not.exist(err);
+            values.length.should.equal(1);
+            values[0].Path.should.equal('C:=\\Program=Files\\Adapter');
+            finish();
+          } catch (assertErr) {
+            finish(assertErr);
+          }
+        });
+      }, done);
+    });
   });
 
   describe('helpers', function() {

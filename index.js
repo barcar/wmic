@@ -68,8 +68,13 @@ function parse_list(data){
     });
 
     lines.forEach(function(line) {
-      var kv = line.replace(/^,/, '').split("=");
-      obj[kv[0]] = kv[1];
+      var cleaned = line.replace(/^,/, '');
+      var sep = cleaned.indexOf('=');
+      if (sep === -1) return;
+
+      var key = cleaned.slice(0, sep);
+      var value = cleaned.slice(sep + 1);
+      obj[key] = value;
     })
 
     if (Object.keys(obj).length > 0)
@@ -248,6 +253,8 @@ function buildPowerShellScript(spec) {
 
 function runPowerShell(spec, opts, cb) {
   var pid;
+  var script = buildPowerShellScript(spec);
+  var encodedCommand = Buffer.from(script, 'utf16le').toString('base64');
 
   function attempt(index) {
     if (index >= SHELLS.length) {
@@ -256,8 +263,6 @@ function runPowerShell(spec, opts, cb) {
     }
 
     var command = SHELLS[index];
-    var script = buildPowerShellScript(spec);
-    var encodedCommand = Buffer.from(script, 'utf16le').toString('base64');
     var ps = execFile(command, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodedCommand], opts);
     var stdout = [];
     var stderr = [];
