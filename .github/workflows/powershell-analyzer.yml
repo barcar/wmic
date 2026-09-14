@@ -13,6 +13,7 @@ on:
     branches:
       - master
       - refactor/powershell-replace-wmic
+      - copilot/refactorpowershell-replace-wmic
     paths:
       - "powershell/**/*.ps1"
       - ".github/workflows/powershell-analyzer.yml"
@@ -34,7 +35,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force
+          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser -Force
           $result = Invoke-ScriptAnalyzer -Path powershell -Recurse -Severity Error, Warning
           if ($result) {
             $result | Format-Table -AutoSize
