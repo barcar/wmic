@@ -6,6 +6,8 @@
 var MAX_WORKER_COUNT = 100;
 var execFile = require('child_process').execFile,
     async = require('async'),
+    fs = require('fs'),
+    path = require('path'),
     iconv = require('iconv-lite');
 
 /**
@@ -228,85 +230,20 @@ function createNoShellError() {
   return err;
 }
 
-function buildPowerShellSpecSection(encodedSpec) {
-  return [
-    '$ErrorActionPreference = "Stop"',
-    '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
-    '$spec = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("' + encodedSpec + '")) | ConvertFrom-Json'
-  ];
-}
+var POWER_SHELL_SCRIPT_PATH = path.join(__dirname, 'powershell', 'wmic-query.ps1');
+var POWER_SHELL_SPEC_PLACEHOLDER = '__WMIC_SPEC_BASE64__';
+var powerShellScriptTemplate;
 
-function buildPowerShellQuerySection() {
-  return [
-    '$rows = @(',
-    '  if ($spec.condition) {',
-    '    Get-CimInstance -ClassName $spec.section -Filter $spec.condition',
-    '  } else {',
-    '    Get-CimInstance -ClassName $spec.section',
-    '  }',
-    ')'
-  ];
-}
-
-function buildPowerShellUtilitySection() {
-  return [
-    'function Convert-Value([object]$value) {',
-    '  if ($null -eq $value) { return "" }',
-    '  if ($value -is [System.Array]) { return (($value | ForEach-Object { if ($null -eq $_) { "" } else { [string]$_ } }) -join ",") }',
-    '  return [string]$value',
-    '}',
-    'function Get-FieldValue([object]$row, [string]$field) {',
-    '  $property = $row.PSObject.Properties[$field]',
-    '  if ($null -eq $property) { return "" }',
-    '  return Convert-Value $property.Value',
-    '}'
-  ];
-}
-
-function buildPowerShellOutputSection() {
-  return [
-    'if ($spec.type -eq "value") {',
-    '  foreach ($row in $rows) {',
-    '    foreach ($field in $spec.fields) {',
-    '      Write-Output ($field + "=" + (Get-FieldValue $row $field))',
-    '    }',
-    '    Write-Output ""',
-    '  }',
-    '} elseif ($spec.type -eq "list") {',
-    '  foreach ($row in $rows) {',
-    '    foreach ($property in $row.CimInstanceProperties) {',
-    '      Write-Output ($property.Name + "=" + (Convert-Value $property.Value))',
-    '    }',
-    '    Write-Output ""',
-    '  }',
-    '} else {',
-    '  Write-Output ($spec.fields -join "`t")',
-    '  foreach ($row in $rows) {',
-    '    $line = @()',
-    '    foreach ($field in $spec.fields) {',
-    '      $line += (Get-FieldValue $row $field).Replace("`t", " ")',
-    '    }',
-    '    Write-Output ($line -join "`t")',
-    '  }',
-    '}'
-  ];
-}
-
-function joinPowerShellSections(sections) {
-  return sections.reduce(function(acc, section) {
-    return acc.concat(section);
-  }, []).join(';');
+function getPowerShellScriptTemplate() {
+  if (!powerShellScriptTemplate) {
+    powerShellScriptTemplate = fs.readFileSync(POWER_SHELL_SCRIPT_PATH, 'utf8');
+  }
+  return powerShellScriptTemplate;
 }
 
 function buildPowerShellScript(spec) {
   var encodedSpec = Buffer.from(JSON.stringify(spec), 'utf8').toString('base64');
-
-  return joinPowerShellSections([
-    buildPowerShellSpecSection(encodedSpec),
-    buildPowerShellQuerySection(),
-    buildPowerShellUtilitySection(),
-    buildPowerShellOutputSection()
-  ]);
+  return getPowerShellScriptTemplate().split(POWER_SHELL_SPEC_PLACEHOLDER).join(encodedSpec);
 }
 
 function runPowerShell(spec, opts, cb) {
