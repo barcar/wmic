@@ -4,7 +4,8 @@
   "description": "Wrapper around the WMIC Windows command interface.",
   "main": "index.js",
   "scripts": {
-    "test": "mocha test/wmic.js"
+    "test": "mocha test/wmic.js",
+    "postinstall": "patch-package"
   },
   "tags": [
     "windows",
@@ -25,6 +26,7 @@
   "license": "MIT",
   "devDependencies": {
     "mocha": "^2.2.4",
+    "patch-package": "^8.0.1",
     "should": "^6.0.1"
   }
 }
