@@ -32,7 +32,7 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
 
-          $scripts = @(git ls-files '*.ps1')
+          $scripts = @(git ls-files '*.ps1' '*.psm1' '*.psd1')
           if (-not $scripts) {
             Write-Host 'No PowerShell scripts found.'
             exit 0
